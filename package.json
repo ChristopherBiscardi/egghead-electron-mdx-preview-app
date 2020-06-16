@@ -1,0 +1,22 @@
+{
+  "name": "egghead-electron-mdx-preview-app",
+  "version": "1.0.0",
+  "main": "index.js",
+  "author": "christopherbiscardi <chris@christopherbiscardi.com> (@chrisbiscardi)",
+  "license": "MIT",
+  "dependencies": {
+    "@babel/core": "^7.10.2",
+    "@babel/plugin-transform-react-jsx": "^7.10.1",
+    "@babel/standalone": "^7.9.5",
+    "@emotion/core": "^10.0.28",
+    "@mdx-js/mdx": "^2.0.0-next.1",
+    "@mdx-js/react": "^2.0.0-next.1",
+    "electron": "^8.2.3",
+    "htm": "^3.0.4",
+    "react": "^16.13.1",
+    "react-dom": "^16.13.1",
+    "slate": "^0.57.1",
+    "slate-react": "^0.57.1",
+    "ulid": "^2.3.0"
+  }
+}

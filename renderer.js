@@ -5,117 +5,92 @@ const htm = require("htm");
 const { jsx } = require("@emotion/core");
 const { ipcRenderer } = require("electron");
 
-const { ulid } = require("ulid");
 const html = htm.bind(jsx);
+const {
+  HashRouter,
+  Routes,
+  Route,
+  Link,
+  useNavigate,
+} = require("react-router-dom");
+const { dialog } = require("electron").remote;
 
-const { useState, useCallback, useMemo, useEffect } = React;
+const Router = HashRouter;
+const {
+  useState,
+  useCallback,
+  useMemo,
+  useEffect,
+  useContext,
+  createContext,
+} = React;
 
-const id = ulid();
-const MarkdownWritingPlace = (props) => {
-  return html`<textarea
-    onChange=${(v) => {
-      ipcRenderer.send("update-mdx", { id, value: v.target.value });
-    }}
-  />`;
-};
-
-class ErrorBoundary extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false };
-  }
-
-  static getDerivedStateFromError(error) {
-    // Update state so the next render will show the fallback UI.
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error, errorInfo) {
-    console.log("componentDidCatch", error);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      // You can render any custom fallback UI
-      return html`<h1>${this.state.error.toString()}</h1>`;
-    }
-    return this.props.children;
-  }
+function openPreviewWindow() {
+  ipcRenderer.send("open-preview");
 }
 
-const Preview = (props) => {
-  const [PreviewValue, setValue] = useState();
-  useEffect(() => {
-    ipcRenderer.on("mdx-changed", async (event, arg) => {
-      const importedMdx = await import(arg.mdxPreviewPath).catch((e) => {
-        console.log(e);
-      });
-      setValue(importedMdx);
-    });
-  }, []);
+const Write = (props) => {
+  const { filename } = useContext(FileContext);
 
-  if (!PreviewValue) {
-    return html`<div>asfklj</div>`;
-  }
-  return html`<${ErrorBoundary}><${PreviewValue.default} /><//>`;
+  return html`<div
+    css=${{
+      display: "grid",
+      gridTemplateColumns: "1fr",
+      fontSize: "20px",
+    }}
+  >
+    <div><button onClick=${openPreviewWindow}>Preview Result</button></div>
+    <textarea
+      rows=${40}
+      onChange=${(v) => {
+        ipcRenderer.send("update-mdx", { filename, value: v.target.value });
+      }}
+    />
+  </div>`;
+};
+
+// win.loadURL(`file://${__dirname}/app/index.html`)
+
+const Home = (props) => {
+  const navigate = useNavigate();
+  const { setFilename } = useContext(FileContext);
+  return html`<div>
+    <button
+      onClick=${async () => {
+        console.log("create new mdx");
+        const result = await dialog.showSaveDialog();
+        if (result.canceled) {
+          return;
+        }
+        const filename = result.filePath.endsWith(".mdx")
+          ? result.filePath
+          : `${result.filePath}.mdx`;
+        console.log(filename);
+        ipcRenderer.sendSync("create-mdx", { filename });
+        setFilename(filename);
+        navigate("/write", { replace: true });
+      }}
+    >
+      Create New MDX
+    <//>
+  <//>`;
+};
+
+const FileContext = createContext({ filename: undefined });
+
+const FileProvider = (props) => {
+  const [filename, setFilename] = useState();
+  return html`<${FileContext.Provider} value=${{ filename, setFilename }}
+    >${props.children}<//
+  >`;
 };
 
 ReactDOM.render(
-  html`<div css=${{
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    fontSize: "20px",
-  }}>
-    <${MarkdownWritingPlace} />
-    <${MDXProvider}
-      components=${{
-        blockquote(props) {
-          return html`<blockquote
-            ...${props}
-            css=${{
-              borderLeft: "3px solid #1fa9f4",
-              color: "#1a1a1a",
-              fontSize: "1.25em",
-              fontStyle: "italic",
-              lineHeight: "1.8em",
-              padding: "1em 2em",
-              position: "relative",
-              transition: ".2s border ease-in-out",
-              zIndex: "0",
-              "&:before": {
-                content: "''",
-                position: "absolute",
-                top: "50%",
-                left: "-4px",
-                height: "2em",
-                backgroundColor: "white",
-                width: "5px",
-                marginTop: "-1em",
-              },
-              "&:after": {
-                content: '"“"',
-                position: "absolute",
-                top: "50%",
-                left: "-0.5em",
-                color: "#1fa9f4",
-                fontFamily: "serif",
-                fontStyle: "normal",
-                lineHeight: "1em",
-                textAlign: "center",
-                textIndent: "-2px",
-                width: "1em",
-                marginTop: "-0.5em",
-                transition: ".2s all ease-in-out, .4s transform ease-in-out",
-              },
-            }}
-          />`;
-        },
-      }}
-    >
-      <div css=${{ fontFamily: "sans-serif" }}>
-        <${Preview} />
-      </div>
-    </MDXProvider>
-  </div>`,
+  html`<${Router}>
+    <${FileProvider}>
+      <${Routes}>
+        <${Route} path="/" element=${html`<${Home} />`} />
+        <${Route} path="/write" element=${html`<${Write} />`} /> <//><//
+  ><//>`,
   document.getElementById("corgis")
 );

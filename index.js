@@ -4,31 +4,53 @@ const tmpPath = app.getPath("temp");
 const fs = require("fs");
 const { mdx, sync } = require("@mdx-js/mdx");
 const { transformSync } = require("@babel/core");
+const { dialog } = require("electron");
+const crypto = require("crypto");
+
 // // disable http cache, mdx preview depends on it
 // app.commandLine.appendSwitch("disable-http-cache");
-
+const windows = {
+  editor: undefined,
+  preview: undefined,
+};
 app.allowRendererProcessReuse = true;
 
 const previewCache = {};
 
-ipcMain.on("update-mdx", (event, arg) => {
-  previewCache[arg.id] = previewCache[arg.id] ? previewCache[arg.id] + 1 : 1;
-  const { id, value } = arg;
+ipcMain.on("create-mdx", (event, { filename }) => {
+  fs.writeFileSync(filename, "");
+  event.returnValue = "done";
+});
+
+ipcMain.on("update-mdx", (event, { filename, value }) => {
+  const hash = crypto.createHash("md5").update(filename).digest("hex");
+  previewCache[hash] = previewCache[hash] ? previewCache[hash] + 1 : 1;
   const mdxPreviewPath = path.resolve(
     tmpPath,
-    `preview-mdx-${id}-${previewCache[arg.id]}.js`
+    `preview-mdx-${hash}-${previewCache[hash]}.js`
   );
 
   try {
-    const mdxContent = sync(arg.value);
+    const mdxContent = sync(value);
     const { code } = transformSync(mdxContent, {
       plugins: [`@babel/plugin-transform-react-jsx`],
     }); // => { code, map, ast }
     fs.writeFileSync(mdxPreviewPath, code);
-    event.reply("mdx-changed", { ...arg, mdxPreviewPath });
+    if (windows.preview) {
+      windows.preview.webContents.send("mdx-changed", { mdxPreviewPath });
+    }
+    // event.reply("mdx-changed", { mdxPreviewPath });
   } catch (e) {
+    if (windows.preview) {
+      windows.preview.webContents.send("mdx-changed", { error: e });
+    }
+    // event.reply("mdx-changed", { error: e });
     console.log("error", e);
   }
+});
+
+ipcMain.on("open-preview", () => {
+  createPreviewWindow();
 });
 
 function createWindow() {
@@ -40,26 +62,46 @@ function createWindow() {
       nodeIntegration: true,
     },
   });
-
+  windows.editor = win;
   // and load the index.html of the app.
   win.loadFile("index.html");
 
   // Open the DevTools.
-  win.webContents.openDevTools();
+  // win.webContents.openDevTools();
+}
+
+function createPreviewWindow() {
+  // Create the browser window.
+  const win = new BrowserWindow({
+    width: 800,
+    height: 600,
+    webPreferences: {
+      nodeIntegration: true,
+    },
+  });
+  windows.preview = win;
+
+  // and load the preview.html of the app.
+  win.loadFile("preview.html");
+
+  // Open the DevTools.
+  // win.webContents.openDevTools();
 
   // win.webContents.session /*.defaultSession*/.webRequest
-  //   .onBeforeRequest("./preview-mdx-*.js", ({ url }, callback) => {
-  //     const filepath = url.split("file:///")[1];
-  //     console.log(">> intercept", filepath);
-  //     if (files.includes(filepath)) {
-  //       callback({
-  //         cancel: false,
-  //         redirectURL:
-  //           "file://" + path.join(path.resolve("."), "public", filepath),
-  //       });
-  //     } else {
-  //       callback({ cancel: false });
-  //     }
+  //   .onBeforeRequest({ urls: ["*://*/*"] }, ({ url }, callback) => {
+  //     console.log("url", url);
+  //     callback({ cancel: false });
+  //     // const filepath = url.split("file:///")[1];
+  //     // console.log(">> intercept", filepath);
+  //     // if (files.includes(filepath)) {
+  //     //   callback({
+  //     //     cancel: false,
+  //     //     redirectURL:
+  //     //       "file://" + path.join(path.resolve("."), "public", filepath),
+  //     //   });
+  //     // } else {
+  //     //   callback({ cancel: false });
+  //     // }
   //   });
 }
 
